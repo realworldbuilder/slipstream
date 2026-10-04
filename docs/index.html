@@ -153,6 +153,7 @@
   <tr><th>What</th><th>Where</th></tr>
   <tr><td>OBS Media Source</td><td><code>rtsp://slipstream-01:8554/cam</code> (uncheck "Local File")</td></tr>
   <tr><td>Browser view</td><td><code>http://slipstream-01:8889/cam</code></td></tr>
+  <tr><td>Control page</td><td><code>http://slipstream-01:8080/</code></td></tr>
   <tr><td>Health</td><td><code>http://slipstream-01:8080/health</code></td></tr>
   <tr><td>Still image</td><td><code>http://slipstream-01:8080/still.jpg</code></td></tr>
   <tr><td>Shell</td><td><code>ssh slipstream</code></td></tr>
@@ -194,11 +195,11 @@
 <p>If ffmpeg exits, for example because the camera is unplugged, MediaMTX starts it again (<code>runOnInitRestart</code>). Plug the camera back in and the stream returns on its own.</p>
 
 <h3>4. health.py answers "is it working?"</h3>
-<p>A small Python HTTP server on port 8080 with two endpoints:</p>
+<p>A small Python HTTP server on port 8080. It also serves the control page and runs the current mode, described below. Its two status endpoints:</p>
 <div class="scroll">
 <table>
   <tr><th>Endpoint</th><th>Returns</th></tr>
-  <tr><td><code>/health</code></td><td>JSON: whether the stream is ready, whether the camera is plugged in, CPU temperature, uptime. Status 200 when the stream is up, 503 when it is not, so a monitor only needs the status code.</td></tr>
+  <tr><td><code>/health</code></td><td>JSON: whether the stream is ready, whether the camera is plugged in, CPU temperature, uptime, current mode. Status 200 when the stream is up, 503 when it is not, so a monitor only needs the status code.</td></tr>
   <tr><td><code>/still.jpg</code></td><td>One frame as a JPEG, or 503 if the stream is down.</td></tr>
 </table>
 </div>
@@ -212,21 +213,30 @@
 <pre><code>rsync -a --exclude .git ./ slipstream:slipstream/ &amp;&amp; ssh slipstream 'bash ~/slipstream/pi/install.sh'</code></pre>
 <p><code>install.sh</code> installs ffmpeg and MediaMTX if they are missing, then installs and restarts the two services.</p>
 
-<h2>Where modes would fit</h2>
-<p>Today Slipstream has one fixed behaviour: 720p at 30 fps, tuned for low delay, always on. All of it lives in one ffmpeg command in <code>pi/mediamtx.yml</code>. A mode would be a named set of these choices:</p>
+<h2>Modes</h2>
+<p>The camera stream always runs, so OBS and the browser view work in every mode. A mode decides what else runs on top of the stream. One mode is active at a time, and the choice survives a reboot.</p>
 <div class="scroll">
 <table>
-  <tr><th>Choice</th><th>Today</th><th>Where it is set</th></tr>
-  <tr><td>Capture size and rate</td><td>1280×720, 30 fps</td><td>ffmpeg input flags</td></tr>
-  <tr><td>Bitrate</td><td>3 Mbit/s</td><td>ffmpeg <code>-b:v</code>, <code>-maxrate</code></td></tr>
-  <tr><td>Delay versus quality</td><td>Lowest delay</td><td>ffmpeg <code>-preset</code>, <code>-tune</code>, <code>-g</code></td></tr>
-  <tr><td>Outputs</td><td>Live stream only</td><td>MediaMTX path settings (it can also record to disk)</td></tr>
-  <tr><td>When it runs</td><td>Always</td><td><code>runOnInit</code> (MediaMTX can instead start ffmpeg only when someone is watching)</td></tr>
+  <tr><th>Mode</th><th>What it adds</th><th>Where the output goes</th></tr>
+  <tr><td>Live</td><td>Nothing. Just the stream.</td><td>OBS and browsers</td></tr>
+  <tr><td>Watch</td><td>Saves a snapshot when something moves, at most one every 20 seconds.</td><td>The SD card, shown on the control page</td></tr>
+  <tr><td>Timelapse</td><td>Saves a still every 60 seconds.</td><td>The SD card, shown on the control page</td></tr>
 </table>
 </div>
-<div class="note"><p>Modes are not built yet. This table is the list of things a mode could change.</p></div>
 
-<footer>Source: <code>pi/mediamtx.yml</code>, <code>pi/health.py</code>, <code>pi/install.sh</code>, <code>pi/systemd/</code></footer>
+<h3>Switching</h3>
+<p>Open the control page at <code>http://slipstream-01:8080/</code>. It has a button for each mode, a live view, and the most recent snapshots. The same switch is available as a command on the Pi and as a plain HTTP call:</p>
+<pre><code>slipstream-mode watch
+curl -X POST http://slipstream-01:8080/mode/watch</code></pre>
+<p>There is no password on the control page. It is reachable only over Tailscale or the local network.</p>
+
+<h3>How Watch decides something moved</h3>
+<p>Twice a second it takes a tiny 160×90 greyscale copy of the picture and compares it with the previous one. If more than 1% of the pixels changed noticeably, it saves the current full-size frame. The thresholds and intervals are constants at the top of <code>pi/modes.py</code>.</p>
+
+<h3>Adding a mode</h3>
+<p>A mode is one Python function in <code>pi/modes.py</code> that reads from the stream, plus one entry in the <code>MODES</code> table. The control page picks up its name and description automatically.</p>
+
+<footer>Source: <code>pi/mediamtx.yml</code>, <code>pi/health.py</code>, <code>pi/modes.py</code>, <code>pi/control.html</code>, <code>pi/install.sh</code>, <code>pi/systemd/</code></footer>
 
 </main>
 </body>

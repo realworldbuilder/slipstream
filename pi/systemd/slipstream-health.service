@@ -1,10 +1,11 @@
 [Unit]
-Description=Slipstream health and still-capture endpoint
+Description=Slipstream control service (health, stills, modes)
 After=network-online.target slipstream-mediamtx.service
 Wants=network-online.target
 
 [Service]
 User=william
+StateDirectory=slipstream
 ExecStart=/usr/bin/python3 /home/william/slipstream/pi/health.py
 Restart=always
 RestartSec=2

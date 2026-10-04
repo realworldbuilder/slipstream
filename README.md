@@ -8,6 +8,7 @@ A Raspberry Pi 5 (`slipstream-01`) with a Logitech C270 that serves a network ca
 | --- | --- |
 | OBS Media Source (uncheck "Local File") | `rtsp://slipstream-01:8554/cam` |
 | Browser view (WebRTC) | `http://slipstream-01:8889/cam` |
+| Control page (modes, live view, snapshots) | `http://slipstream-01:8080/` |
 | Health | `http://slipstream-01:8080/health` |
 | Still image | `http://slipstream-01:8080/still.jpg` |
 | Shell | `ssh slipstream` |
@@ -18,8 +19,22 @@ A Raspberry Pi 5 (`slipstream-01`) with a Logitech C270 that serves a network ca
 
 - `pi/mediamtx.yml`: MediaMTX runs ffmpeg, which reads 1280x720 MJPEG at 30 fps from the camera and
   encodes H.264 with libx264. MediaMTX restarts ffmpeg if the camera drops.
-- `pi/health.py`: small HTTP service on port 8080. Stills are grabbed from the running stream.
+- `pi/health.py`: small HTTP service on port 8080: health, stills, the control page, and mode switching.
+  Stills are grabbed from the running stream.
+- `pi/modes.py`: the modes. The stream always runs; a mode decides what else runs on top of it.
 - `pi/systemd/`: `slipstream-mediamtx.service` and `slipstream-health.service`, both enabled at boot.
+
+## Modes
+
+| Mode | What it adds |
+| --- | --- |
+| `live` | Nothing. Just the stream. |
+| `watch` | Saves a snapshot when something moves, at most one every 20 seconds. |
+| `timelapse` | Saves a still every 60 seconds. |
+
+Switch from the control page, or on the Pi with `slipstream-mode watch`, or with
+`curl -X POST http://slipstream-01:8080/mode/watch`. The mode survives a reboot.
+Snapshots are saved under `/var/lib/slipstream/captures/` and are not pruned.
 
 ## Deploy
 

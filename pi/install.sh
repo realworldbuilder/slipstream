@@ -15,6 +15,7 @@ if ! command -v mediamtx >/dev/null; then
   rm -rf "$tmp"
 fi
 
+sudo install -m 755 slipstream-mode /usr/local/bin/slipstream-mode
 sudo install -m 644 systemd/slipstream-mediamtx.service systemd/slipstream-health.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable slipstream-mediamtx.service slipstream-health.service

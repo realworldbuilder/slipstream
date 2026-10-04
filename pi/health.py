@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
-"""Slipstream health and still-capture endpoint.
+"""Slipstream control service: health, stills and mode switching.
 
-GET /health     JSON status; 200 when the stream is up, 503 otherwise
-GET /still.jpg  one frame grabbed from the running stream
+GET  /              control page
+GET  /health        JSON status; 200 when the stream is up, 503 otherwise
+GET  /still.jpg     one frame grabbed from the running stream
+GET  /mode          current mode and the available modes
+POST /mode/<name>   switch mode
+GET  /captures      recent snapshots saved by watch and timelapse
 """
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import modes
+
 PORT = 8080
 CAMERA = "/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_BCED6B80-video-index0"
-STREAM = "rtsp://127.0.0.1:8554/cam"
 MTX_API = "http://127.0.0.1:9997/v3/paths/get/cam"
+PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "control.html")
+CAPTURE_PATH = re.compile(r"^/captures/(watch|timelapse)/(\d{8}-\d{6}\.jpg)$")
+
+mode = modes.Modes()
 
 
 def stream_ready():
@@ -38,14 +48,8 @@ def uptime():
         return int(float(f.read().split()[0]))
 
 
-def grab_still():
-    # Read from the stream so the camera is never opened a second time.
-    r = subprocess.run(
-        ["ffmpeg", "-loglevel", "error", "-rtsp_transport", "tcp", "-i", STREAM,
-         "-frames:v", "1", "-q:v", "2", "-f", "image2", "-"],
-        capture_output=True, timeout=15,
-    )
-    return r.stdout if r.returncode == 0 and r.stdout else None
+def mode_info():
+    return {"mode": mode.current, "modes": {n: fn.__doc__ for n, fn in modes.MODES.items()}}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -56,10 +60,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _json(self, code, obj):
+        self._send(code, "application/json", json.dumps(obj).encode())
+
+    def _file(self, path, ctype):
+        try:
+            with open(path, "rb") as f:
+                self._send(200, ctype, f.read())
+        except OSError:
+            self._send(404, "text/plain", b"not found\n")
+
     def do_GET(self):
-        if self.path == "/health":
+        capture = CAPTURE_PATH.match(self.path)
+        if self.path == "/":
+            self._file(PAGE, "text/html; charset=utf-8")
+        elif self.path == "/health":
             ready = stream_ready()
-            body = json.dumps({
+            self._json(200 if ready else 503, {
                 "ok": ready,
                 "host": os.uname().nodename,
                 "time": int(time.time()),
@@ -67,17 +84,29 @@ class Handler(BaseHTTPRequestHandler):
                 "cpu_temp_c": cpu_temp(),
                 "camera_present": os.path.exists(CAMERA),
                 "stream_ready": ready,
-            }).encode()
-            self._send(200 if ready else 503, "application/json", body)
+                "mode": mode.current,
+            })
         elif self.path == "/still.jpg":
             try:
-                jpg = grab_still()
+                jpg = modes.grab_still()
             except subprocess.TimeoutExpired:
                 jpg = None
             if jpg:
                 self._send(200, "image/jpeg", jpg)
             else:
                 self._send(503, "text/plain", b"stream not available\n")
+        elif self.path == "/mode":
+            self._json(200, mode_info())
+        elif self.path == "/captures":
+            self._json(200, modes.recent_captures())
+        elif capture:
+            self._file(os.path.join(modes.CAPTURES, *capture.groups()), "image/jpeg")
+        else:
+            self._send(404, "text/plain", b"not found\n")
+
+    def do_POST(self):
+        if self.path.startswith("/mode/") and mode.set(self.path[len("/mode/"):]):
+            self._json(200, mode_info())
         else:
             self._send(404, "text/plain", b"not found\n")
 

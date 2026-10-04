@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slipstream control</title>
+<style>
+  :root { --bg: #fbfaf7; --surface: #fff; --text: #1d1f23; --muted: #62676f; --line: #dcd9d1; --accent: #0b6e75; --on-accent: #fff; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171a; --surface: #1c2024; --text: #e7e8ea; --muted: #9aa0a8; --line: #30363c; --accent: #5cc4cb; --on-accent: #0c1b1d; --bad: #f2867f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 1.6rem; margin: 0; }
+  h2 { font-size: 1rem; margin: 32px 0 10px; }
+  #status { color: var(--muted); font-size: 0.9rem; margin: 4px 0 20px; }
+  #status.bad { color: var(--bad); }
+  #modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  #modes button { font: inherit; text-align: left; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+  #modes button b { display: block; text-transform: capitalize; font-size: 1.05rem; }
+  #modes button span { color: var(--muted); font-size: 0.85rem; }
+  #modes button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  #modes button[aria-pressed="true"] span { color: inherit; opacity: 0.85; }
+  iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 10px; background: #000; }
+  #captures { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  #captures a { color: var(--muted); font-size: 0.75rem; text-decoration: none; }
+  #captures img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+  .empty { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Slipstream</h1>
+  <div id="status">Connecting…</div>
+
+  <div id="modes"></div>
+
+  <h2>Live view</h2>
+  <iframe id="live" title="Live camera view" allow="autoplay"></iframe>
+
+  <h2>Recent captures</h2>
+  <div id="captures"></div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  $('live').src = `http://${location.hostname}:8889/cam`;
+
+  function showModes(info) {
+    $('modes').replaceChildren(...Object.entries(info.modes).map(([name, about]) => {
+      const b = document.createElement('button');
+      b.setAttribute('aria-pressed', name === info.mode);
+      b.innerHTML = '<b></b><span></span>';
+      b.children[0].textContent = name;
+      b.children[1].textContent = about;
+      b.onclick = () => fetch('/mode/' + name, {method: 'POST'}).then(r => r.json()).then(showModes);
+      return b;
+    }));
+  }
+
+  function showCaptures(items) {
+    if (!items.length) { $('captures').innerHTML = '<div class="empty">Nothing yet. Watch and timelapse save snapshots here.</div>'; return; }
+    $('captures').replaceChildren(...items.map(c => {
+      const a = document.createElement('a');
+      a.href = c.url; a.target = '_blank';
+      const img = document.createElement('img');
+      img.src = c.url; img.loading = 'lazy'; img.alt = '';
+      const [d, t] = c.name.replace('.jpg', '').split('-');
+      a.append(img, `${c.kind} · ${d.slice(4, 6)}/${d.slice(6)} ${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4)}`);
+      return a;
+    }));
+  }
+
+  async function refresh() {
+    try {
+      const [h, m, c] = await Promise.all(['/health', '/mode', '/captures'].map(u => fetch(u).then(r => r.json())));
+      $('status').className = h.ok ? '' : 'bad';
+      $('status').textContent = (h.ok ? 'Stream up' : (h.camera_present ? 'Stream down' : 'Camera unplugged'))
+        + ` · ${h.cpu_temp_c}°C · up ${Math.floor(h.uptime_s / 3600)}h ${Math.floor(h.uptime_s % 3600 / 60)}m`;
+      showModes(m); showCaptures(c);
+    } catch (e) {
+      $('status').className = 'bad'; $('status').textContent = 'Cannot reach Slipstream';
+    }
+  }
+  refresh(); setInterval(refresh, 5000);
+</script>
+</body>
+</html>
