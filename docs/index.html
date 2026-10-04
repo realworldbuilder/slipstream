@@ -47,6 +47,11 @@
   .t { fill: var(--text); font: 600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   .s { fill: var(--muted); font: 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
   .arrowhead { fill: var(--text); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .pair figure { margin: 0; }
+  .pair img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 12px; border: 1px solid var(--line); }
+  .pair figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+  @media (max-width: 560px) { .pair { grid-template-columns: 1fr; } }
   .note { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 0 0 14px; }
   .note p:last-child { margin: 0; }
   footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
@@ -135,6 +140,10 @@
   <tr><td>Power</td><td>USB-C</td></tr>
   <tr><td>Enclosure</td><td>Grey PVC electrical junction box with a screw-down lid. The camera clips to the top and is wrapped in clear film.</td></tr>
 </table>
+</div>
+<div class="pair">
+  <figure><img src="prototype.jpg" alt="The prototype: a webcam wrapped in clear film, clipped to the lid of a grey PVC junction box."><figcaption>The prototype</figcaption></figure>
+  <figure><img src="cad.svg" alt="Isometric line drawing of the same node with numbered parts: webcam, clip mount, lid, gasket, junction box, mounting tab and USB cable."><figcaption>The same node as a drawing</figcaption></figure>
 </div>
 <p>Nothing is exposed to the public internet. The node is reached over Tailscale or the local network only.</p>
 
