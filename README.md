@@ -1,19 +1,20 @@
 # Slipstream
 
-A Raspberry Pi 5 (`slipstream-01`) with a Logitech C270 that serves a network camera feed for OBS.
+A Raspberry Pi 5 with a Logitech C270 that serves a network camera feed for OBS.
 
 ## Use it
 
 | What | Where |
 | --- | --- |
-| OBS Media Source (uncheck "Local File") | `rtsp://slipstream:PASSWORD@slipstream-01:8554/cam` |
-| Browser view (WebRTC) | `http://slipstream-01:8889/cam` |
-| Control page (modes, live view, snapshots) | `http://slipstream-01:8080/` |
-| Health | `http://slipstream-01:8080/health` |
-| Still image | `http://slipstream-01:8080/still.jpg` |
+| OBS Media Source (uncheck "Local File") | `rtsp://slipstream:PASSWORD@YOUR-PI:8554/cam` |
+| Browser view (WebRTC) | `http://YOUR-PI:8889/cam` |
+| Control page (modes, live view, snapshots) | `http://YOUR-PI:8080/` |
+| Health | `http://YOUR-PI:8080/health` |
+| Still image | `http://YOUR-PI:8080/still.jpg` |
 | Shell | `ssh slipstream` |
 
-`slipstream-01` resolves over Tailscale. On the home network without Tailscale, use `slipstream-01.local`.
+Replace `YOUR-PI` with the Pi's hostname (its Tailscale name, or `hostname.local` on the home network) and
+`PASSWORD` with the password below.
 
 Everything asks for a login: user `slipstream`, and a password that exists only on the Pi.
 `install.sh` prints it; to see it again run `ssh slipstream sudo cat /etc/slipstream/password`.
@@ -37,7 +38,7 @@ To change it, delete that file and run `install.sh` again. Commands run on the P
 | `timelapse` | Saves a still every 60 seconds. |
 
 Switch from the control page, or on the Pi with `slipstream-mode watch`, or with
-`curl -u slipstream:PASSWORD -X POST http://slipstream-01:8080/mode/watch`. The mode survives a reboot.
+`curl -u slipstream:PASSWORD -X POST http://YOUR-PI:8080/mode/watch`. The mode survives a reboot.
 Snapshots are saved under `/var/lib/slipstream/captures/` and are not pruned.
 
 ## Deploy
