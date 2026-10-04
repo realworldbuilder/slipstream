@@ -147,6 +147,20 @@
 </div>
 <p>Nothing is exposed to the public internet. The node is reached over Tailscale or the local network only, and it asks for a password there too.</p>
 
+<h2>Use it</h2>
+<p>Once yours is built, these are the addresses. Replace <code>YOUR-PI</code> with your Pi's hostname and <code>PASSWORD</code> with the password <code>install.sh</code> prints.</p>
+<div class="scroll">
+<table>
+  <tr><th>What</th><th>Where</th></tr>
+  <tr><td>OBS Media Source</td><td><code>rtsp://slipstream:PASSWORD@YOUR-PI:8554/cam</code> (uncheck "Local File")</td></tr>
+  <tr><td>Browser view</td><td><code>http://YOUR-PI:8889/cam</code></td></tr>
+  <tr><td>Control page</td><td><code>http://YOUR-PI:8080/</code></td></tr>
+  <tr><td>Health</td><td><code>http://YOUR-PI:8080/health</code></td></tr>
+  <tr><td>Still image</td><td><code>http://YOUR-PI:8080/still.jpg</code></td></tr>
+</table>
+</div>
+<p>Everything asks for a login: user <code>slipstream</code>, and a password that exists only on the Pi. <code>install.sh</code> creates it on first run and prints it; <code>sudo cat /etc/slipstream/password</code> on the Pi shows it again. To change it, delete that file and run <code>install.sh</code> again.</p>
+
 <h2>How each piece works</h2>
 
 <h3>1. The camera hands over MJPEG</h3>
