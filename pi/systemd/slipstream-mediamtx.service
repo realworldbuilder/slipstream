@@ -1,0 +1,15 @@
+[Unit]
+Description=Slipstream camera stream (MediaMTX)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=william
+StateDirectory=slipstream
+WorkingDirectory=/var/lib/slipstream
+ExecStart=/usr/local/bin/mediamtx /home/william/slipstream/pi/mediamtx.yml
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

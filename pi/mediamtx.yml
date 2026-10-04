@@ -1,0 +1,19 @@
+# Slipstream MediaMTX config. Anything not set here keeps the MediaMTX default
+# (RTSP :8554, HLS :8888, WebRTC :8889).
+
+# Control API, used by the health service. Localhost only.
+api: yes
+apiAddress: 127.0.0.1:9997
+
+paths:
+  cam:
+    # C270 MJPEG in, H.264 out. The Pi 5 has no hardware H.264 encoder, so libx264.
+    runOnInit: >
+      ffmpeg -hide_banner -loglevel error
+      -f v4l2 -input_format mjpeg -video_size 1280x720 -framerate 30
+      -i /dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_BCED6B80-video-index0
+      -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p
+      -g 30 -b:v 3000k -maxrate 3000k -bufsize 1500k
+      -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
+    # Restarts ffmpeg if it exits, e.g. when the camera is unplugged.
+    runOnInitRestart: yes

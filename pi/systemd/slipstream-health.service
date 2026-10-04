@@ -1,0 +1,13 @@
+[Unit]
+Description=Slipstream health and still-capture endpoint
+After=network-online.target slipstream-mediamtx.service
+Wants=network-online.target
+
+[Service]
+User=william
+ExecStart=/usr/bin/python3 /home/william/slipstream/pi/health.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
