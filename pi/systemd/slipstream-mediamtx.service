@@ -7,7 +7,7 @@ Wants=network-online.target
 User=william
 StateDirectory=slipstream
 WorkingDirectory=/var/lib/slipstream
-ExecStart=/usr/local/bin/mediamtx /home/william/slipstream/pi/mediamtx.yml
+ExecStart=/usr/local/bin/mediamtx /etc/slipstream/mediamtx.yml
 Restart=always
 RestartSec=2
 

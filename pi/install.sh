@@ -15,8 +15,20 @@ if ! command -v mediamtx >/dev/null; then
   rm -rf "$tmp"
 fi
 
+# The password lives only on the Pi. It is made once and kept across re-installs.
+sudo install -d -m 750 -o root -g william /etc/slipstream
+if ! sudo test -s /etc/slipstream/password; then
+  openssl rand -hex 16 | sudo install -m 640 -o root -g william /dev/stdin /etc/slipstream/password
+fi
+pass=$(sudo cat /etc/slipstream/password)
+sed "s/__PASSWORD__/$pass/" mediamtx.yml \
+  | sudo install -m 640 -o root -g william /dev/stdin /etc/slipstream/mediamtx.yml
+
 sudo install -m 755 slipstream-mode /usr/local/bin/slipstream-mode
 sudo install -m 644 systemd/slipstream-mediamtx.service systemd/slipstream-health.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable slipstream-mediamtx.service slipstream-health.service
 sudo systemctl restart slipstream-mediamtx.service slipstream-health.service
+
+echo "Login: slipstream / $pass"
+echo "OBS:   rtsp://slipstream:$pass@$(hostname):8554/cam"

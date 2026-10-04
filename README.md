@@ -6,7 +6,7 @@ A Raspberry Pi 5 (`slipstream-01`) with a Logitech C270 that serves a network ca
 
 | What | Where |
 | --- | --- |
-| OBS Media Source (uncheck "Local File") | `rtsp://slipstream-01:8554/cam` |
+| OBS Media Source (uncheck "Local File") | `rtsp://slipstream:PASSWORD@slipstream-01:8554/cam` |
 | Browser view (WebRTC) | `http://slipstream-01:8889/cam` |
 | Control page (modes, live view, snapshots) | `http://slipstream-01:8080/` |
 | Health | `http://slipstream-01:8080/health` |
@@ -14,6 +14,10 @@ A Raspberry Pi 5 (`slipstream-01`) with a Logitech C270 that serves a network ca
 | Shell | `ssh slipstream` |
 
 `slipstream-01` resolves over Tailscale. On the home network without Tailscale, use `slipstream-01.local`.
+
+Everything asks for a login: user `slipstream`, and a password that exists only on the Pi.
+`install.sh` prints it; to see it again run `ssh slipstream sudo cat /etc/slipstream/password`.
+To change it, delete that file and run `install.sh` again. Commands run on the Pi itself need no password.
 
 ## How it works
 
@@ -33,7 +37,7 @@ A Raspberry Pi 5 (`slipstream-01`) with a Logitech C270 that serves a network ca
 | `timelapse` | Saves a still every 60 seconds. |
 
 Switch from the control page, or on the Pi with `slipstream-mode watch`, or with
-`curl -X POST http://slipstream-01:8080/mode/watch`. The mode survives a reboot.
+`curl -u slipstream:PASSWORD -X POST http://slipstream-01:8080/mode/watch`. The mode survives a reboot.
 Snapshots are saved under `/var/lib/slipstream/captures/` and are not pruned.
 
 ## Deploy
@@ -44,4 +48,5 @@ From the Mac, in this folder:
 rsync -a --exclude .git ./ slipstream:slipstream/ && ssh slipstream 'bash ~/slipstream/pi/install.sh'
 ```
 
-`install.sh` installs ffmpeg and MediaMTX if missing, then installs and restarts the services.
+`install.sh` installs ffmpeg and MediaMTX if missing, creates the password on first run, writes the
+MediaMTX config with that password to `/etc/slipstream/`, then installs and restarts the services.

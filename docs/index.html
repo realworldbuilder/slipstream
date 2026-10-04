@@ -76,7 +76,7 @@
   </defs>
 
   <rect class="pi" x="200" y="20" width="380" height="270" rx="12"/>
-  <text class="s" x="214" y="40">Raspberry Pi 5 · slipstream-01</text>
+  <text class="s" x="214" y="40">Raspberry Pi 5</text>
 
   <rect class="box" x="10" y="70" width="110" height="60" rx="8"/>
   <text class="t" x="65" y="96" text-anchor="middle">C270 webcam</text>
@@ -145,21 +145,7 @@
   <figure><img src="prototype.jpg" alt="The prototype: a webcam wrapped in clear film, clipped to the lid of a grey PVC junction box."><figcaption>The prototype</figcaption></figure>
   <figure><img src="cad.svg" alt="Isometric line drawing of the same node with numbered parts: webcam, clip mount, lid, gasket, junction box, mounting tab, power cable, USB cable and rear vent holes."><figcaption>The same node as a drawing</figcaption></figure>
 </div>
-<p>Nothing is exposed to the public internet. The node is reached over Tailscale or the local network only.</p>
-
-<h2>Use it</h2>
-<div class="scroll">
-<table>
-  <tr><th>What</th><th>Where</th></tr>
-  <tr><td>OBS Media Source</td><td><code>rtsp://slipstream-01:8554/cam</code> (uncheck "Local File")</td></tr>
-  <tr><td>Browser view</td><td><code>http://slipstream-01:8889/cam</code></td></tr>
-  <tr><td>Control page</td><td><code>http://slipstream-01:8080/</code></td></tr>
-  <tr><td>Health</td><td><code>http://slipstream-01:8080/health</code></td></tr>
-  <tr><td>Still image</td><td><code>http://slipstream-01:8080/still.jpg</code></td></tr>
-  <tr><td>Shell</td><td><code>ssh slipstream</code></td></tr>
-</table>
-</div>
-<p><code>slipstream-01</code> resolves over Tailscale. On the home network without Tailscale, use <code>slipstream-01.local</code>.</p>
+<p>Nothing is exposed to the public internet. The node is reached over Tailscale or the local network only, and it asks for a password there too.</p>
 
 <h2>How each piece works</h2>
 
@@ -211,7 +197,7 @@
 <h2>Deploy</h2>
 <p>The Pi runs whatever is in this repository. From the Mac, in the repo folder:</p>
 <pre><code>rsync -a --exclude .git ./ slipstream:slipstream/ &amp;&amp; ssh slipstream 'bash ~/slipstream/pi/install.sh'</code></pre>
-<p><code>install.sh</code> installs ffmpeg and MediaMTX if they are missing, then installs and restarts the two services.</p>
+<p><code>install.sh</code> installs ffmpeg and MediaMTX if they are missing, creates the password on first run, writes the MediaMTX config with that password to <code>/etc/slipstream/</code>, then installs and restarts the two services.</p>
 
 <h2>Modes</h2>
 <p>The camera stream always runs, so OBS and the browser view work in every mode. A mode decides what else runs on top of the stream. One mode is active at a time, and the choice survives a reboot.</p>
@@ -225,10 +211,9 @@
 </div>
 
 <h3>Switching</h3>
-<p>Open the control page at <code>http://slipstream-01:8080/</code>. It has a button for each mode, a live view, and the most recent snapshots. The same switch is available as a command on the Pi and as a plain HTTP call:</p>
-<pre><code>slipstream-mode watch
-curl -X POST http://slipstream-01:8080/mode/watch</code></pre>
-<p>There is no password on the control page. It is reachable only over Tailscale or the local network.</p>
+<p>The control page, served by the Pi on port 8080, has a button for each mode, a live view, and the most recent snapshots. The same switch is available as a command on the Pi:</p>
+<pre><code>slipstream-mode watch</code></pre>
+<p>The stream and the control page ask for a password, which exists only on the Pi. Commands run on the Pi itself need no password.</p>
 
 <h3>How Watch decides something moved</h3>
 <p>Twice a second it takes a tiny 160×90 greyscale copy of the picture and compares it with the previous one. If more than 1% of the pixels changed noticeably, it saves the current full-size frame. The thresholds and intervals are constants at the top of <code>pi/modes.py</code>.</p>

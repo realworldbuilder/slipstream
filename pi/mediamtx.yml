@@ -1,9 +1,26 @@
 # Slipstream MediaMTX config. Anything not set here keeps the MediaMTX default
 # (RTSP :8554, HLS :8888, WebRTC :8889).
+# This file is a template: install.sh fills in __PASSWORD__ and writes the
+# result to /etc/slipstream/mediamtx.yml, which is what MediaMTX runs.
 
 # Control API, used by the health service. Localhost only.
 api: yes
 apiAddress: 127.0.0.1:9997
+
+authInternalUsers:
+  # Processes on the Pi itself: the ffmpeg publisher, the modes, the health service.
+- user: any
+  ips: ['127.0.0.1', '::1']
+  permissions:
+  - action: publish
+  - action: read
+  - action: api
+  # Everyone else signs in to watch.
+- user: slipstream
+  pass: __PASSWORD__
+  permissions:
+  - action: read
+    path: cam
 
 paths:
   cam:

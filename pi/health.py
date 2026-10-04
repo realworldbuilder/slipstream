@@ -7,7 +7,11 @@ GET  /still.jpg     one frame grabbed from the running stream
 GET  /mode          current mode and the available modes
 POST /mode/<name>   switch mode
 GET  /captures      recent snapshots saved by watch and timelapse
+
+Every route needs the login (HTTP Basic), except for requests from the Pi itself.
 """
+import base64
+import hmac
 import json
 import os
 import re
@@ -23,6 +27,12 @@ CAMERA = "/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_BCED6B80-video-index0"
 MTX_API = "http://127.0.0.1:9997/v3/paths/get/cam"
 PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "control.html")
 CAPTURE_PATH = re.compile(r"^/captures/(watch|timelapse)/(\d{8}-\d{6}\.jpg)$")
+USER = "slipstream"
+PASSWORD_FILE = os.environ.get("SLIPSTREAM_PASSWORD_FILE", "/etc/slipstream/password")
+
+# Written by install.sh. Without it the service does not start, rather than run open.
+with open(PASSWORD_FILE) as f:
+    LOGIN = base64.b64encode(f"{USER}:{f.read().strip()}".encode()).decode()
 
 mode = modes.Modes()
 
@@ -70,7 +80,24 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._send(404, "text/plain", b"not found\n")
 
+    def _authorized(self):
+        if self.client_address[0] in ("127.0.0.1", "::1"):
+            return True
+        scheme, _, given = self.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() == "basic" and hmac.compare_digest(given.strip().encode(), LOGIN.encode()):
+            return True
+        body = b"password required\n"
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Slipstream"')
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return False
+
     def do_GET(self):
+        if not self._authorized():
+            return
         capture = CAPTURE_PATH.match(self.path)
         if self.path == "/":
             self._file(PAGE, "text/html; charset=utf-8")
@@ -105,6 +132,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, "text/plain", b"not found\n")
 
     def do_POST(self):
+        if not self._authorized():
+            return
         if self.path.startswith("/mode/") and mode.set(self.path[len("/mode/"):]):
             self._json(200, mode_info())
         else:
