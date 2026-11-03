@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Set up, test or turn off Slipstream's Telegram alerts. Run on the Pi with a terminal:
+
+    ssh -t slipstream slipstream-alerts setup
+    slipstream-alerts test
+    slipstream-alerts off
+
+Setup asks for a bot token, waits for you to message the bot so it can learn your chat id,
+writes /etc/slipstream/telegram, and sends a test photo through the running service.
+"""
+import json
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+FILE = "/etc/slipstream/telegram"
+API = "https://api.telegram.org/bot{token}/{method}"
+
+
+def call(token, method, **params):
+    url = API.format(token=token, method=method)
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            reply = json.load(r)
+    except Exception as e:
+        sys.exit(f"Telegram did not answer: {e}")
+    if not reply.get("ok"):
+        sys.exit(f"Telegram said no: {reply.get('description', reply)}")
+    return reply["result"]
+
+
+def test():
+    # Through the service, so the exact path watch mode uses is what gets tested.
+    r = subprocess.run(["curl", "-fsS", "-X", "POST", "http://127.0.0.1:8080/alerts/test"],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        print("Test photo sent. Check Telegram.")
+    else:
+        sys.exit("Test photo failed. Is the stream up and the Pi online? "
+                 "journalctl -u slipstream-health -n 20 shows why.")
+
+
+def setup():
+    print("1. In Telegram, talk to @BotFather, send /newbot, and paste the token it gives you.")
+    token = input("   Bot token: ").strip()
+    me = call(token, "getMe")
+    print(f"   Token works: that bot is @{me['username']}.")
+    print(f"2. Now open a chat with @{me['username']} in Telegram and send it any message.")
+    print("   Waiting up to two minutes...", end="", flush=True)
+    chat = None
+    for _ in range(60):
+        updates = call(token, "getUpdates", timeout=0)
+        chats = [u["message"]["chat"] for u in updates if "message" in u]
+        if chats:
+            chat = chats[-1]
+            break
+        time.sleep(2)
+        print(".", end="", flush=True)
+    print()
+    if not chat:
+        sys.exit("   No message arrived. Run setup again once you have messaged the bot.")
+    who = chat.get("username") or chat.get("first_name") or chat.get("title") or "you"
+    print(f"   Got it: alerts will go to {who} (chat id {chat['id']}).")
+    subprocess.run(["sudo", "install", "-m", "640", "-o", "root", "-g", "william", "/dev/stdin", FILE],
+                   input=f"token={token}\nchat_id={chat['id']}\n", text=True, check=True)
+    print(f"3. Saved to {FILE}. Sending a test photo...")
+    test()
+
+
+def off():
+    subprocess.run(["sudo", "rm", "-f", FILE], check=True)
+    print("Alerts are off. Run `slipstream-alerts setup` to turn them back on.")
+
+
+if __name__ == "__main__":
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    {"setup": setup, "test": test, "off": off}.get(cmd, lambda: sys.exit(__doc__.strip()))()

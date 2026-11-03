@@ -24,7 +24,7 @@ pass=$(sudo cat /etc/slipstream/password)
 sed "s/__PASSWORD__/$pass/" mediamtx.yml \
   | sudo install -m 640 -o root -g william /dev/stdin /etc/slipstream/mediamtx.yml
 
-sudo install -m 755 slipstream-mode /usr/local/bin/slipstream-mode
+sudo install -m 755 slipstream-mode slipstream-alerts /usr/local/bin/
 sudo install -m 644 systemd/slipstream-mediamtx.service systemd/slipstream-health.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable slipstream-mediamtx.service slipstream-health.service
@@ -32,3 +32,8 @@ sudo systemctl restart slipstream-mediamtx.service slipstream-health.service
 
 echo "Login: slipstream / $pass"
 echo "OBS:   rtsp://slipstream:$pass@$(hostname):8554/cam"
+if sudo test -s /etc/slipstream/telegram; then
+  echo "Alerts: Telegram (slipstream-alerts test | off)"
+else
+  echo "Alerts: not set up. From the Mac: ssh -t slipstream slipstream-alerts setup"
+fi

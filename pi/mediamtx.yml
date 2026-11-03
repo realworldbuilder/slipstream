@@ -24,13 +24,18 @@ authInternalUsers:
 
 paths:
   cam:
-    # C270 MJPEG in, H.264 out. The Pi 5 has no hardware H.264 encoder, so libx264.
+    # C270 MJPEG video and its mic in, H.264 + Opus out. The Pi 5 has no hardware
+    # H.264 encoder, so libx264. Opus because MediaMTX's WebRTC output only carries
+    # Opus; RTSP (OBS) plays it too. The mic is addressed by ALSA card name, which
+    # like the by-id video path survives the Pi renumbering devices.
     runOnInit: >
       ffmpeg -hide_banner -loglevel error
       -f v4l2 -input_format mjpeg -video_size 1280x720 -framerate 30
       -i /dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_BCED6B80-video-index0
+      -f alsa -thread_queue_size 2048 -i plughw:CARD=WEBCAM,DEV=0
       -c:v libx264 -preset ultrafast -tune zerolatency -pix_fmt yuv420p
       -g 30 -b:v 3000k -maxrate 3000k -bufsize 1500k
+      -c:a libopus -b:a 64k -ar 48000 -ac 1 -application lowdelay
       -f rtsp rtsp://localhost:$RTSP_PORT/$MTX_PATH
     # Restarts ffmpeg if it exits, e.g. when the camera is unplugged.
     runOnInitRestart: yes
