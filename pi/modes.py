@@ -9,6 +9,8 @@ import subprocess
 import threading
 import time
 
+import notify
+
 STREAM = "rtsp://127.0.0.1:8554/cam"
 STATE = os.environ.get("SLIPSTREAM_STATE", "/var/lib/slipstream")
 MODE_FILE = os.path.join(STATE, "mode")
@@ -17,13 +19,14 @@ CAPTURES = os.path.join(STATE, "captures")
 LATEST = "/dev/shm/slipstream-latest.jpg"
 
 TIMELAPSE_INTERVAL_S = 60
-WATCH_COOLDOWN_S = 20
+WATCH_QUIET_S = 10             # this long with no motion ends a motion event
 WATCH_SIZE = (160, 90)         # motion is judged on a small greyscale copy
 WATCH_PIXEL_DELTA = 25         # how far a pixel must change to count (0-255)
 WATCH_CHANGED_FRACTION = 0.01  # share of pixels that must change to call it motion
 
+# -an: the stream carries the mic too, and nothing below wants audio.
 FFMPEG_IN = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-             "-rtsp_transport", "tcp", "-i", STREAM]
+             "-rtsp_transport", "tcp", "-i", STREAM, "-an"]
 
 
 def grab_still():
@@ -47,8 +50,13 @@ def live(job):
     job.stopping.wait()
 
 
+def moved(prev, cur):
+    changed = sum(abs(a - b) > WATCH_PIXEL_DELTA for a, b in zip(prev, cur))
+    return changed > len(cur) * WATCH_CHANGED_FRACTION
+
+
 def watch(job):
-    """Saves a snapshot when something moves, at most one every 20 seconds."""
+    """Saves a snapshot and sends a Telegram alert each time motion starts."""
     w, h = WATCH_SIZE
     # One ffmpeg, two outputs: tiny grey frames to compare, and the latest
     # full-size frame kept on disk so a snapshot is instant.
@@ -57,17 +65,28 @@ def watch(job):
         "-vf", "fps=2", "-q:v", "2", "-f", "image2", "-update", "1", "-atomic_writing", "1", LATEST,
     ], stdout=subprocess.PIPE)
     try:
-        prev, last = None, 0
+        # A motion event starts on the first moving frame after a still spell and
+        # ends once nothing has moved for WATCH_QUIET_S. One snapshot and one
+        # alert per event, however long the movement goes on.
+        prev, moving, last_motion = None, False, 0.0
         while True:
             cur = proc.stdout.read(w * h)
             if len(cur) < w * h:
                 break
-            if prev and time.time() - last >= WATCH_COOLDOWN_S:
-                changed = sum(abs(a - b) > WATCH_PIXEL_DELTA for a, b in zip(prev, cur))
-                if changed > w * h * WATCH_CHANGED_FRACTION:
-                    with open(LATEST, "rb") as f:
-                        save("watch", f.read())
-                    last = time.time()
+            if prev and moved(prev, cur):
+                last_motion = time.time()
+                if not moving:
+                    moving = True
+                    try:
+                        with open(LATEST, "rb") as f:
+                            jpg = f.read()
+                    except OSError:
+                        jpg = None
+                    if jpg:
+                        save("watch", jpg)
+                        notify.alert(jpg, f"Motion at {time.strftime('%H:%M:%S')} · {os.uname().nodename}")
+            elif moving and time.time() - last_motion >= WATCH_QUIET_S:
+                moving = False
             prev = cur
     finally:
         proc.terminate()

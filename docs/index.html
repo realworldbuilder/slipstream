@@ -62,13 +62,13 @@
 
 <div class="eyebrow">Camera node</div>
 <h1>Slipstream</h1>
-<p class="lede">A Raspberry Pi 5 with a Logitech C270 webcam that turns a USB camera into a network camera. Anything on the network can pull the feed: OBS, a browser, or a script.</p>
+<p class="lede">A Raspberry Pi 5 with a Logitech C270 webcam that turns a USB camera into a network camera, sound included. Anything on the network can pull the feed: OBS, a browser, or a script. Left watching a room, it sends a Telegram photo when something moves.</p>
 
 <h2>The whole thing in one picture</h2>
 <p>Video flows left to right. The camera is opened exactly once, by ffmpeg; everything else reads from MediaMTX.</p>
 
 <div class="figure">
-<svg viewBox="0 0 780 310" role="img" aria-label="Camera sends MJPEG to ffmpeg on the Pi, ffmpeg encodes H.264 and publishes to MediaMTX, which serves OBS over RTSP and browsers over WebRTC. A health service reads from MediaMTX and answers on port 8080.">
+<svg viewBox="0 0 780 310" role="img" aria-label="Camera sends MJPEG video and mic audio to ffmpeg on the Pi, ffmpeg encodes H.264 and Opus and publishes to MediaMTX, which serves OBS over RTSP and browsers over WebRTC. A health service reads from MediaMTX and answers on port 8080.">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path class="arrowhead" d="M0 0 L10 5 L0 10 z"/>
@@ -83,7 +83,7 @@
   <text class="s" x="65" y="114" text-anchor="middle">USB</text>
 
   <path class="wire" d="M120 100 H218" marker-end="url(#a)"/>
-  <text class="s" x="160" y="90" text-anchor="middle">MJPEG</text>
+  <text class="s" x="160" y="90" text-anchor="middle">MJPEG + mic</text>
   <text class="s" x="160" y="118" text-anchor="middle">720p30</text>
 
   <rect class="box" x="220" y="70" width="130" height="60" rx="8"/>
@@ -91,7 +91,7 @@
   <text class="s" x="285" y="114" text-anchor="middle">encodes with libx264</text>
 
   <path class="wire" d="M350 100 H428" marker-end="url(#a)"/>
-  <text class="s" x="390" y="90" text-anchor="middle">H.264</text>
+  <text class="s" x="390" y="90" text-anchor="middle">H.264 + Opus</text>
 
   <rect class="box-accent" x="430" y="70" width="130" height="60" rx="8"/>
   <text class="t" x="495" y="96" text-anchor="middle">MediaMTX</text>
@@ -152,7 +152,7 @@
 <div class="scroll">
 <table>
   <tr><th>What</th><th>Where</th></tr>
-  <tr><td>OBS Media Source</td><td><code>rtsp://slipstream:PASSWORD@YOUR-PI:8554/cam</code> (uncheck "Local File")</td></tr>
+  <tr><td>OBS Media Source</td><td><code>rtsp://slipstream:PASSWORD@YOUR-PI:8554/cam</code> (uncheck "Local File"; carries video and the mic)</td></tr>
   <tr><td>Browser view</td><td><code>http://YOUR-PI:8889/cam</code></td></tr>
   <tr><td>Control page</td><td><code>http://YOUR-PI:8080/</code></td></tr>
   <tr><td>Health</td><td><code>http://YOUR-PI:8080/health</code></td></tr>
@@ -166,9 +166,10 @@
 <h3>1. The camera hands over MJPEG</h3>
 <p>The C270 can't send uncompressed 720p at 30 fps over USB 2, so it compresses each frame as a JPEG inside the camera. That stream of JPEGs is MJPEG. It is easy to produce but large, and neither RTSP players nor browsers want it, so it has to be converted.</p>
 <p>The camera is addressed by its <code>/dev/v4l/by-id/…</code> path rather than <code>/dev/video0</code>, so it is still found if the Pi numbers its devices differently after a reboot.</p>
+<p>The C270 also has a microphone, which shows up as a separate ALSA sound card. ffmpeg opens it as a second input, again by name (<code>plughw:CARD=WEBCAM</code>) rather than by number, for the same reason.</p>
 
-<h3>2. ffmpeg re-encodes to H.264</h3>
-<p>ffmpeg decodes the JPEGs and encodes H.264, the format OBS and browsers both play. The Pi 5 has no hardware H.264 encoder, so this runs on the CPU with libx264. The settings all trade picture efficiency for low delay and low CPU use:</p>
+<h3>2. ffmpeg re-encodes to H.264 and Opus</h3>
+<p>ffmpeg decodes the JPEGs and encodes H.264, the format OBS and browsers both play. The Pi 5 has no hardware H.264 encoder, so this runs on the CPU with libx264. The mic is encoded as Opus, because that is the only audio codec MediaMTX can hand to a browser over WebRTC, and OBS plays it over RTSP just as well. The settings all trade efficiency for low delay and low CPU use:</p>
 <div class="scroll">
 <table>
   <tr><th>Setting</th><th>What it does</th></tr>
@@ -178,11 +179,13 @@
   <tr><td><code>-g 30</code></td><td>A full keyframe every 30 frames, which is once a second. A viewer who joins waits at most a second for a picture.</td></tr>
   <tr><td><code>-b:v 3000k -maxrate 3000k -bufsize 1500k</code></td><td>Holds the stream near 3 Mbit/s, with only half a second of slack, so the bitrate stays steady on the network.</td></tr>
   <tr><td><code>-pix_fmt yuv420p</code></td><td>The colour format every player supports.</td></tr>
+  <tr><td><code>-f alsa -thread_queue_size 2048 -i plughw:CARD=WEBCAM,DEV=0</code></td><td>The mic. The queue lets audio pile up for a moment while a video frame is being encoded, instead of being dropped.</td></tr>
+  <tr><td><code>-c:a libopus -b:a 64k -ar 48000 -ac 1 -application lowdelay</code></td><td>Mono Opus at 48 kHz, which is what WebRTC expects, tuned for delay rather than music.</td></tr>
 </table>
 </div>
 
 <h3>3. MediaMTX serves it</h3>
-<p>MediaMTX is a small stream server. It launches ffmpeg itself (<code>runOnInit</code>), receives the H.264 on the path <code>cam</code>, and re-serves the same stream in several protocols without re-encoding:</p>
+<p>MediaMTX is a small stream server. It launches ffmpeg itself (<code>runOnInit</code>), receives the H.264 and Opus on the path <code>cam</code>, and re-serves the same stream in several protocols without re-encoding:</p>
 <div class="scroll">
 <table>
   <tr><th>Port</th><th>Protocol</th><th>Used by</th></tr>
@@ -201,6 +204,7 @@
   <tr><th>Endpoint</th><th>Returns</th></tr>
   <tr><td><code>/health</code></td><td>JSON: whether the stream is ready, whether the camera is plugged in, CPU temperature, uptime, current mode. Status 200 when the stream is up, 503 when it is not, so a monitor only needs the status code.</td></tr>
   <tr><td><code>/still.jpg</code></td><td>One frame as a JPEG, or 503 if the stream is down.</td></tr>
+  <tr><td><code>POST /alerts/test</code></td><td>Sends the current frame to Telegram as a test. 503 if alerts are not set up or the stream is down.</td></tr>
 </table>
 </div>
 <p>The still is taken from the running stream, not from the camera. A V4L2 camera can only be opened by one program at a time, and ffmpeg already has it.</p>
@@ -219,7 +223,7 @@
 <table>
   <tr><th>Mode</th><th>What it adds</th><th>Where the output goes</th></tr>
   <tr><td>Live</td><td>Nothing. Just the stream.</td><td>OBS and browsers</td></tr>
-  <tr><td>Watch</td><td>Saves a snapshot when something moves, at most one every 20 seconds.</td><td>The SD card, shown on the control page</td></tr>
+  <tr><td>Watch</td><td>Saves a snapshot and sends a Telegram alert each time motion starts.</td><td>The SD card, shown on the control page, and your phone</td></tr>
   <tr><td>Timelapse</td><td>Saves a still every 60 seconds.</td><td>The SD card, shown on the control page</td></tr>
 </table>
 </div>
@@ -230,12 +234,17 @@
 <p>The stream and the control page ask for a password, which exists only on the Pi. Commands run on the Pi itself need no password.</p>
 
 <h3>How Watch decides something moved</h3>
-<p>Twice a second it takes a tiny 160×90 greyscale copy of the picture and compares it with the previous one. If more than 1% of the pixels changed noticeably, it saves the current full-size frame. The thresholds and intervals are constants at the top of <code>pi/modes.py</code>.</p>
+<p>Twice a second it takes a tiny 160×90 greyscale copy of the picture and compares it with the previous one. If more than 1% of the pixels changed noticeably, that frame counts as motion. A <em>motion event</em> starts on the first moving frame after a still spell and ends once nothing has moved for 10 seconds. Each event gives one saved snapshot and one alert, whether the movement lasted a second or a minute, so a person walking around the room is one alert and not a stream of them. The thresholds are constants at the top of <code>pi/modes.py</code>.</p>
+
+<h3>Telegram alerts</h3>
+<p>The snapshot goes to Telegram as a photo, sent from a thread so the detector never waits on the network. Setup is a one-time command run with a terminal, because it asks questions:</p>
+<pre><code>ssh -t slipstream slipstream-alerts setup</code></pre>
+<p>It asks for a bot token (make a bot with @BotFather), then waits for you to message that bot so it can learn your chat id, writes both to <code>/etc/slipstream/telegram</code> on the Pi, and sends a test photo. <code>slipstream-alerts test</code> sends another; <code>slipstream-alerts off</code> deletes the file and stops alerts. The control page shows whether alerts are on and has a "Send test alert" button. Without the file, Watch still saves snapshots; it just tells nobody.</p>
 
 <h3>Adding a mode</h3>
 <p>A mode is one Python function in <code>pi/modes.py</code> that reads from the stream, plus one entry in the <code>MODES</code> table. The control page picks up its name and description automatically.</p>
 
-<footer>Source: <code>pi/mediamtx.yml</code>, <code>pi/health.py</code>, <code>pi/modes.py</code>, <code>pi/control.html</code>, <code>pi/install.sh</code>, <code>pi/systemd/</code></footer>
+<footer>Source: <code>pi/mediamtx.yml</code>, <code>pi/health.py</code>, <code>pi/modes.py</code>, <code>pi/notify.py</code>, <code>pi/slipstream-alerts</code>, <code>pi/control.html</code>, <code>pi/install.sh</code>, <code>pi/systemd/</code></footer>
 
 </main>
 </body>

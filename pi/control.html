@@ -14,8 +14,10 @@
   main { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
   h1 { font-size: 1.6rem; margin: 0; }
   h2 { font-size: 1rem; margin: 32px 0 10px; }
-  #status { color: var(--muted); font-size: 0.9rem; margin: 4px 0 20px; }
+  #status { color: var(--muted); font-size: 0.9rem; margin: 4px 0 20px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
   #status.bad { color: var(--bad); }
+  #test { font: inherit; font-size: 0.8rem; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+  #test[hidden] { display: none; }
   #modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
   #modes button { font: inherit; text-align: left; padding: 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
   #modes button b { display: block; text-transform: capitalize; font-size: 1.05rem; }
@@ -32,7 +34,7 @@
 <body>
 <main>
   <h1>Slipstream</h1>
-  <div id="status">Connecting…</div>
+  <div id="status"><span id="text">Connecting…</span><button id="test" hidden>Send test alert</button></div>
 
   <div id="modes"></div>
 
@@ -75,13 +77,21 @@
     try {
       const [h, m, c] = await Promise.all(['/health', '/mode', '/captures'].map(u => fetch(u).then(r => r.json())));
       $('status').className = h.ok ? '' : 'bad';
-      $('status').textContent = (h.ok ? 'Stream up' : (h.camera_present ? 'Stream down' : 'Camera unplugged'))
-        + ` · ${h.cpu_temp_c}°C · up ${Math.floor(h.uptime_s / 3600)}h ${Math.floor(h.uptime_s % 3600 / 60)}m`;
+      $('text').textContent = (h.ok ? 'Stream up' : (h.camera_present ? 'Stream down' : 'Camera unplugged'))
+        + ` · ${h.cpu_temp_c}°C · up ${Math.floor(h.uptime_s / 3600)}h ${Math.floor(h.uptime_s % 3600 / 60)}m`
+        + ` · alerts ${h.alerts ? 'on' : 'off'}`;
+      $('test').hidden = !h.alerts;
       showModes(m); showCaptures(c);
     } catch (e) {
-      $('status').className = 'bad'; $('status').textContent = 'Cannot reach Slipstream';
+      $('status').className = 'bad'; $('text').textContent = 'Cannot reach Slipstream'; $('test').hidden = true;
     }
   }
+  $('test').onclick = async () => {
+    $('test').disabled = true; $('test').textContent = 'Sending…';
+    const ok = (await fetch('/alerts/test', {method: 'POST'})).ok;
+    $('test').textContent = ok ? 'Sent' : 'Failed';
+    setTimeout(() => { $('test').textContent = 'Send test alert'; $('test').disabled = false; }, 3000);
+  };
   refresh(); setInterval(refresh, 5000);
 </script>
 </body>

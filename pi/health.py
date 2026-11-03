@@ -7,6 +7,7 @@ GET  /still.jpg     one frame grabbed from the running stream
 GET  /mode          current mode and the available modes
 POST /mode/<name>   switch mode
 GET  /captures      recent snapshots saved by watch and timelapse
+POST /alerts/test   send a test photo to Telegram (503 if alerts are off or the stream is down)
 
 Every route needs the login (HTTP Basic), except for requests from the Pi itself.
 """
@@ -21,6 +22,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import modes
+import notify
 
 PORT = 8080
 CAMERA = "/dev/v4l/by-id/usb-046d_C270_HD_WEBCAM_BCED6B80-video-index0"
@@ -112,6 +114,7 @@ class Handler(BaseHTTPRequestHandler):
                 "camera_present": os.path.exists(CAMERA),
                 "stream_ready": ready,
                 "mode": mode.current,
+                "alerts": "telegram" if notify.configured() else None,
             })
         elif self.path == "/still.jpg":
             try:
@@ -136,6 +139,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path.startswith("/mode/") and mode.set(self.path[len("/mode/"):]):
             self._json(200, mode_info())
+        elif self.path == "/alerts/test":
+            try:
+                jpg = modes.grab_still() if notify.configured() else None
+            except subprocess.TimeoutExpired:
+                jpg = None
+            sent = bool(jpg) and notify.send_photo(jpg, f"Test alert · {os.uname().nodename}")
+            self._json(200 if sent else 503, {"ok": sent})
         else:
             self._send(404, "text/plain", b"not found\n")
 
